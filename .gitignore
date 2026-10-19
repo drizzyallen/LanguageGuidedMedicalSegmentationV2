@@ -1,6 +1,8 @@
 # Raw and prepared data (never commit datasets)
 datasets/
-data/
+data/*
+# split ID lists (no images) are committed
+!data/splits/
 
 # Training outputs and weights
 runs/
