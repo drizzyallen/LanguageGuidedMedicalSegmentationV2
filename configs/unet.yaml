@@ -1,0 +1,40 @@
+# U-Net (LViT repository, external/LViT @ ba90775)
+# Training recipe from LViT Config.py / train_model.py / Train_one_epoch.py / Load_Dataset.py.
+method: unet
+source: https://github.com/HUANGLIZI/LViT
+model:
+  file: external/LViT/nets/UNet.py
+  class: UNet
+  n_channels: 3            # Config.py: n_channels = 3 (grayscale duplicated to 3 channels)
+  n_classes: 1             # Config.py: n_labels = 1 (binary, sigmoid output)
+
+input_size: 224            # Config.py: img_size = 224
+input_scaling: "to_tensor (uint8 / 255)"   # Load_Dataset.py RandomGenerator / ValGenerator
+pretraining: none          # trained from scratch
+
+loss:
+  name: WeightedDiceBCE    # utils.py; train_model.py: WeightedDiceBCE(dice_weight=0.5, BCE_weight=0.5)
+  dice_weight: 0.5
+  bce_weight: 0.5
+
+optimizer:
+  name: Adam               # train_model.py
+  lr: 3.0e-4               # Config.py: "Covid19: 3e-4" (used for both QaTa-COV19 and MosMedData+)
+
+scheduler:
+  name: CosineAnnealingWarmRestarts   # utils.py; Config.py: cosineLR = True
+  T_0: 10
+  T_mult: 1
+  eta_min: 1.0e-4
+  step: per_epoch          # stepped once per epoch, after validation (Train_one_epoch.py)
+
+batch_size: 2              # Config.py: batch_size = 2
+num_workers: 8             # train_model.py
+augmentation: "LViT RandomGenerator: p=0.5 random rot90 + flip, else p=0.25 random rotation in [-20, 20) deg (nearest)"
+max_epochs: 2000           # Config.py: epochs = 2000
+early_stopping_patience: 50   # Config.py
+min_epoch_to_save: 5       # train_model.py: best model saved only when epoch + 1 > 5
+deterministic: true        # train_model.py: cudnn.deterministic = True, cudnn.benchmark = False
+
+checkpoint_selection: "best validation Dice (per-image Dice at 224x224, threshold 0.5, mean over validation set)"
+seeds: [1001, 1002, 1003]

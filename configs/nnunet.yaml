@@ -1,0 +1,38 @@
+# nnU-Net v2 (official repository, external/nnUNet @ v2.8.1)
+# Training recipe = default nnUNetTrainer + default nnUNetPlans, 2d configuration.
+method: nnunet
+source: https://github.com/MIC-DKFZ/nnUNet
+version: 2.8.1
+configuration: 2d          # 3D configurations are not used
+plans: nnUNetPlans         # default planner (original nnU-Net method, Nature Methods 2021)
+trainer: nnUNetTrainerValDice   # src/nnunet/trainer.py: nnUNetTrainer + full validation Dice checkpointing
+dataset_ids:
+  qata: 501                # Dataset501_QaTaCOV19
+  mosmed: 502              # Dataset502_MosMedDataPlus
+fold: 0                    # splits_final.json fold 0 = LViT train / LViT val
+
+input_size: 224            # 224x224 prepared data; patch size set by nnU-Net planning
+input_channels: 1
+input_scaling: "nnU-Net ZScoreNormalization (per image)"
+pretraining: none
+
+# Values below are nnUNetTrainer defaults; src/nnunet/train.py checks they match.
+loss: "Dice + CrossEntropy with deep supervision"
+optimizer:
+  name: SGD
+  lr: 0.01                 # initial_lr
+  momentum: 0.99
+  nesterov: true
+  weight_decay: 3.0e-5
+scheduler:
+  name: PolyLRScheduler    # lr = initial_lr * (1 - epoch / num_epochs) ** 0.9
+  step: per_epoch
+batch_size: "from nnU-Net planning (nnUNetPlans.json)"
+augmentation: "nnU-Net default: rotation, scaling, Gaussian noise, Gaussian blur, brightness, contrast, low resolution, gamma, mirroring"
+max_epochs: 1000           # num_epochs
+iterations_per_epoch: 250  # num_iterations_per_epoch
+val_iterations_per_epoch: 50   # num_val_iterations_per_epoch (pseudo Dice, logged only)
+
+checkpoint_selection: "best validation Dice (per-image Dice at 224x224 on all LViT validation images, threshold 0.5) -> checkpoint_best_valdice.pth"
+validation_inference: "nnUNetPredictor sliding window, no test-time mirroring (selection only)"
+seeds: [1001, 1002, 1003]

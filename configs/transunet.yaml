@@ -1,0 +1,43 @@
+# TransUNet (official repository, external/TransUNet @ 02ef001)
+# Training recipe from train.py / trainer.py / datasets/dataset_synapse.py.
+method: transunet
+source: https://github.com/Beckschen/TransUNet
+model:
+  file: external/TransUNet/networks/vit_seg_modeling.py
+  class: VisionTransformer
+  vit_name: R50-ViT-B_16   # train.py: --vit_name R50-ViT-B_16
+  n_classes: 2             # background / lesion
+  n_skip: 3                # train.py: --n_skip 3
+  vit_patches_size: 16     # train.py: --vit_patches_size 16 (grid = 224 / 16 = 14)
+
+input_size: 224            # train.py: --img_size 224
+input_channels: 1          # model repeats a 1-channel input to 3 channels (vit_seg_modeling.py)
+input_scaling: "uint8 / 255 (float in [0, 1])"
+pretraining:
+  weights: external/pretrained/imagenet21k/R50+ViT-B_16.npz   # ImageNet-21k, official README URL
+  loader: VisionTransformer.load_from
+
+loss:
+  name: "0.5 * CrossEntropy + 0.5 * DiceLoss(softmax)"   # trainer.py
+  ce_weight: 0.5
+  dice_weight: 0.5
+
+optimizer:
+  name: SGD                # trainer.py
+  lr: 0.01                 # train.py: --base_lr 0.01
+  momentum: 0.9
+  weight_decay: 1.0e-4
+
+scheduler:
+  name: poly               # trainer.py: lr = base_lr * (1 - iter / max_iterations) ** 0.9
+  power: 0.9
+  step: per_iteration      # max_iterations = max_epochs * iterations_per_epoch
+
+batch_size: 24             # train.py: --batch_size 24
+num_workers: 8             # trainer.py
+augmentation: "TransUNet RandomGenerator: p=0.5 random rot90 + flip, else p=0.25 random rotation in [-20, 20) deg (nearest)"
+max_epochs: 150            # train.py: --max_epochs 150
+deterministic: true        # train.py: --deterministic 1
+
+checkpoint_selection: "best validation Dice (per-image Dice at 224x224, threshold 0.5, mean over validation set); added because the official trainer has no validation"
+seeds: [1001, 1002, 1003]
