@@ -1,9 +1,12 @@
 [submodule "external/LViT"]
 	path = external/LViT
 	url = https://github.com/HUANGLIZI/LViT
+	ignore = untracked
 [submodule "external/TransUNet"]
 	path = external/TransUNet
 	url = https://github.com/Beckschen/TransUNet
+	ignore = untracked
 [submodule "external/nnUNet"]
 	path = external/nnUNet
 	url = https://github.com/MIC-DKFZ/nnUNet
+	ignore = untracked
