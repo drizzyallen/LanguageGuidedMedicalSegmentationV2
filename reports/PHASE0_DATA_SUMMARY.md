@@ -11,8 +11,17 @@ Only images and masks are used; the text annotations in the LViT spreadsheets ar
 
 ## Sources
 
-Downloaded from the dataset package linked by the LViT project
-(`https://drive.google.com/drive/folders/1BjkeVIYwiV4d94AMDZfBtIk_7MNIb2AH`), stored in `datasets/` (not committed).
+All files were added manually to `datasets/` (not committed); nothing was downloaded by the pipeline.
+The split spreadsheets are the LViT text-annotation split files; only their `Image` ID column is used.
+The checksums below identify the exact files used.
+
+The 7 local spreadsheets were compared (2026-10-19) with the 7 spreadsheets in the LViT Google Drive folder
+given in the Phase 0 document (`https://drive.google.com/drive/folders/1BjkeVIYwiV4d94AMDZfBtIk_7MNIb2AH`).
+File bytes differ (different saves), but the contents are identical: same columns, same rows, same order,
+same image IDs. Drive name → local name: `Train_ID_for_Covid19` → `Train_ID`, `Val_ID_for_Covid19` → `Val_ID`,
+`Test_text_for_Covid19` → same, `Train_Val_text_for_Covid19` → `WITH-TEXT-NONSPLIT/Train_text_for_Covid19` (not used),
+`Train_text_MosMedData` → `Train_text_MosMedData+ 1`, `Val_text_MosMedData` → `Val_text_MosMedData+ 1`,
+`Test_text_MosMedData+` → same. The Drive folder contains no images.
 
 | File | Use | SHA-256 |
 |---|---|---|
