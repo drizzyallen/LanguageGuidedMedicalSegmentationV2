@@ -1,0 +1,9 @@
+[submodule "external/LViT"]
+	path = external/LViT
+	url = https://github.com/HUANGLIZI/LViT
+[submodule "external/TransUNet"]
+	path = external/TransUNet
+	url = https://github.com/Beckschen/TransUNet
+[submodule "external/nnUNet"]
+	path = external/nnUNet
+	url = https://github.com/MIC-DKFZ/nnUNet

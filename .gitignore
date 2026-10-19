@@ -1,0 +1,17 @@
+# Raw and prepared data (never commit datasets)
+datasets/
+data/
+
+# Training outputs and weights
+runs/
+external/pretrained/
+*.pth
+*.pth.tar
+*.pt
+*.npz
+*.ckpt
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
