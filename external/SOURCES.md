@@ -17,5 +17,27 @@ any adaptation (data loading, seeds, checkpoint selection) lives in `src/` as wr
 
 ## Pretrained weights
 
-TransUNet `R50+ViT-B_16.npz` (ImageNet-21k), from the URL given in the official TransUNet README:
-`https://storage.googleapis.com/vit_models/imagenet21k/R50+ViT-B_16.npz` → `external/pretrained/` (not committed).
+TransUNet `R50+ViT-B_16.npz` (Google ViT, ImageNet-21k), downloaded from the URL given in the
+official TransUNet README (step "1. Download Google pre-trained ViT models"):
+
+| Field | Value |
+|---|---|
+| URL | `https://storage.googleapis.com/vit_models/imagenet21k/R50+ViT-B_16.npz` |
+| Local path | `external/pretrained/imagenet21k/R50+ViT-B_16.npz` (not committed) |
+| Size | 461,217,452 bytes |
+| Upstream last-modified | 2020-11-30 |
+| MD5 | `fb93b71c850df1b0390448d4bafc4262` (matches Google `x-goog-hash`) |
+| SHA-256 | `ff009bf39bb4f9198b834cfe46aba2bfdaf730e933ab3e3c4b1edf4226eaafbe` |
+| Downloaded | 2026-10-19 |
+
+The official code expects `../model/vit_checkpoint/imagenet21k/R50+ViT-B_16.npz`; our wrapper sets
+`config.pretrained_path` to the local path above instead of modifying upstream code.
+
+Re-download:
+
+```bash
+mkdir -p external/pretrained/imagenet21k
+curl -o "external/pretrained/imagenet21k/R50+ViT-B_16.npz" \
+  "https://storage.googleapis.com/vit_models/imagenet21k/R50%2BViT-B_16.npz"
+md5sum "external/pretrained/imagenet21k/R50+ViT-B_16.npz"   # fb93b71c850df1b0390448d4bafc4262
+```
