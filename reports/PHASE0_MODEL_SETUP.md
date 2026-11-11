@@ -84,4 +84,4 @@ Times may be longer when several jobs share the machine's CPUs (data augmentatio
 
 ## Environment
 
-Conda env `lgms_phase0` (`environment.yml`): Python 3.10, PyTorch 2.5.1 + CUDA 12.1, nnU-Net 2.8.1, OpenCV 4.10.
+Conda env `lgms_phase0` (`envs/phase0_environment.yml`): Python 3.10, PyTorch 2.5.1 + CUDA 12.1, nnU-Net 2.8.1, OpenCV 4.10.

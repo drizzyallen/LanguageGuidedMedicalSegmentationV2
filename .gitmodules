@@ -10,3 +10,11 @@
 	path = external/nnUNet
 	url = https://github.com/MIC-DKFZ/nnUNet
 	ignore = untracked
+[submodule "external/RecLMIS"]
+	path = external/RecLMIS
+	url = https://github.com/ShawnHuang497/RecLMIS
+	ignore = untracked
+[submodule "external/DD-CMD"]
+	path = external/DD-CMD
+	url = https://github.com/maklachur/DD-CMD
+	ignore = untracked

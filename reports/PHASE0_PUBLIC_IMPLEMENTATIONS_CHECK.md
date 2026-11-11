@@ -6,7 +6,7 @@ Date: 2026-10-19. No QaTa-COV19 or MosMedData+ data was used; checks use random 
 
 | Item | Value |
 |---|---|
-| Conda env | `lgms_phase0` (`environment.yml`) |
+| Conda env | `lgms_phase0` (`envs/phase0_environment.yml`) |
 | Python | 3.10.20 |
 | PyTorch | 2.5.1 + CUDA 12.1 |
 | NumPy | 2.2.6 |
@@ -22,7 +22,7 @@ Date: 2026-10-19. No QaTa-COV19 or MosMedData+ data was used; checks use random 
 | TransUNet | TransUNet `02ef001` | `R50-ViT-B_16`, `n_classes=2`, `n_skip=3`, grid 14×14 (as in official `train.py`) | load ImageNet-21k weights with official `load_from()`; forward 2×3×224×224 | weights loaded (patch embedding matches checkpoint); output 2×2×224×224; 105.28M params |
 | nnU-Net | nnU-Net `v2.8.1` | v2, `2d` configuration only | `nnUNetv2_plan_and_preprocess -c 2d` + `nnUNetv2_train ... 2d 0 -tr nnUNetTrainer_1epoch` on a 12-image synthetic 224×224 dataset | only `2d` planned (patch 224×224, `PlainConvUNet`); 1 epoch trained, validation run, `checkpoint_best.pth` saved |
 
-Script: `src/checks/check_public_implementations.py` (U-Net, TransUNet). The nnU-Net check was run on a
+Script: `src/checks/check_phase0_implementations.py` (U-Net, TransUNet). The nnU-Net check was run on a
 temporary synthetic dataset outside the repository.
 
 ## Notes for Task 0.3

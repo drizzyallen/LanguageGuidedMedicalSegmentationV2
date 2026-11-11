@@ -4,7 +4,7 @@ U-Net:     LViT nets/UNet.py, built as in LViT Config.py (n_channels=3, n_labels
 TransUNet: official R50-ViT-B_16, built as in TransUNet train.py (n_skip=3, grid=img/16),
            2 classes, ImageNet-21k weights loaded with the official load_from().
 
-Usage: python src/checks/check_public_implementations.py
+Usage: python src/checks/check_phase0_implementations.py
 """
 import os
 import sys
