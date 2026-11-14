@@ -73,6 +73,25 @@ def git_commit():
         return "unknown ({})".format(e)
 
 
+def check_gpu(logger):
+    """Initialise CUDA and check that this process runs on the physical GPU named by CUDA_VISIBLE_DEVICES
+    (nvidia-smi index). Guards against code that changes CUDA_VISIBLE_DEVICES after start-up: LViT's Config.py
+    sets it to '0' and initialises CUDA on import."""
+    import subprocess
+    want = os.environ["CUDA_VISIBLE_DEVICES"]
+    torch.zeros(1).cuda()
+    apps = subprocess.check_output(["nvidia-smi", "--query-compute-apps=pid,gpu_bus_id",
+                                    "--format=csv,noheader"]).decode()
+    gpus = subprocess.check_output(["nvidia-smi", "--query-gpu=index,pci.bus_id", "--format=csv,noheader"]).decode()
+    bus = {b.strip(): i.strip() for i, b in (line.split(",") for line in gpus.strip().splitlines())}
+    mine = [b.strip() for p, b in (line.split(",") for line in apps.strip().splitlines()) if int(p) == os.getpid()]
+    assert mine, "this process is not listed by nvidia-smi"
+    used = sorted(set(bus[b] for b in mine))
+    logger.info("GPU check: CUDA_VISIBLE_DEVICES={}, process runs on nvidia-smi GPU {} ({})".format(
+        want, ",".join(used), ",".join(sorted(set(mine)))))
+    assert used == [want], "process runs on GPU {} instead of GPU {}".format(used, want)
+
+
 def get_logger(path):
     logger = logging.getLogger(path)
     logger.setLevel(logging.INFO)

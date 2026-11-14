@@ -265,6 +265,7 @@ def main():
     logger.info("dataset={} seed={} quick={} GPU={} torch={} lightning={}".format(
         cli.dataset, cli.seed, cli.quick, os.environ["CUDA_VISIBLE_DEVICES"], torch.__version__, pl.__version__))
     logger.info("git commit: {}".format(C.git_commit()))
+    C.check_gpu(logger)
     logger.info("config: {}".format(cfg))
     args = load_args(logger, cfg, ddcmd_config, cli.dataset)
     set_seed_official(cli.seed)

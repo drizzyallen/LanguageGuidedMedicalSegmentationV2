@@ -32,9 +32,12 @@ TASK_NAME = {"qata": "Covid19", "mosmed": "MosMedDataPlus"}  # stored by ImageTo
 
 
 def import_official():
-    """Import the official LViT modules. Config.py sets CUDA_VISIBLE_DEVICES='0' on import; restore ours."""
+    """Import the official LViT modules. Config.py sets CUDA_VISIBLE_DEVICES='0' and calls
+    torch.cuda.is_available() on import, which would bind the process to GPU 0. CUDA is therefore initialised
+    on our GPU first (the device list is fixed at initialisation), and the variable is restored afterwards."""
     visible = os.environ.get("CUDA_VISIBLE_DEVICES")
     assert visible is not None, "set CUDA_VISIBLE_DEVICES to the GPU to use"
+    torch.cuda.init()
     os.environ.setdefault("MXNET_HOME", os.path.join(C.PRETRAINED, "mxnet"))  # BertEmbedding weights
     sys.path.insert(0, LVIT)
     import Config
@@ -179,6 +182,7 @@ def main():
     logger.info("dataset={} seed={} quick={} GPU={} torch={}".format(args.dataset, args.seed, args.quick,
                                                                     os.environ["CUDA_VISIBLE_DEVICES"], torch.__version__))
     logger.info("git commit: {}".format(C.git_commit()))
+    C.check_gpu(logger)
     logger.info("config: {}".format(cfg))
     config_vit = check_official_config(logger, cfg, Config, args.dataset)
     if args.test:

@@ -234,6 +234,7 @@ def main():
     logger.info("dataset={} seed={} quick={} GPU={} torch={}".format(args.dataset, args.seed, args.quick,
                                                                     os.environ["CUDA_VISIBLE_DEVICES"], torch.__version__))
     logger.info("git commit: {}".format(C.git_commit()))
+    C.check_gpu(logger)
     logger.info("config: {}".format(cfg))
     config_vit = check_official_config(logger, cfg, config, args.dataset)
     if args.test:
