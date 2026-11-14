@@ -1,4 +1,4 @@
-"""Common final evaluator (Tasks 0.4/0.5): score saved test predictions against the prepared test masks.
+"""Common final evaluator (Tasks 0.4/0.5, Phase 1 Tasks 1.6/1.7): score saved test predictions against the prepared test masks.
 
 Same code for every method. Evaluation size 224x224, binary masks (prediction PNG > 0 = lesion).
 Writes per_case_metrics.csv (sample_id, dice, miou, hd95, assd, empty_prediction) and test_summary.json.
@@ -58,7 +58,7 @@ def evaluate(method, dataset, seed):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--method", required=True, choices=["unet", "transunet", "nnunet"])
+    parser.add_argument("--method", required=True, choices=["unet", "transunet", "nnunet", "lvit", "reclmis", "ddcmd"])
     parser.add_argument("--dataset", required=True, choices=["qata", "mosmed"])
     parser.add_argument("--seed", type=int, required=True)
     args = parser.parse_args()

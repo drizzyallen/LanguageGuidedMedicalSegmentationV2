@@ -16,6 +16,9 @@ Data: data/views/lvit/<dataset>/ (LViT layout; symlinks to the common prepared 2
 Usage (env lgms_reclmis):
   CUDA_VISIBLE_DEVICES=0 python src/phase1/train_reclmis.py --dataset qata --seed 1001 [--quick]
 --quick runs the Task 1.3 checks on a small subset and writes to runs/quick_check/reclmis/.
+--test (Task 1.6, after training) reloads checkpoint_best.pth, re-checks its validation Dice and saves binary test
+predictions to runs/reclmis/<dataset>/seed_<seed>/test/predictions/ (official ValGenerator input, threshold 0.5).
+The forward pass takes a mask argument that it never reads; test predictions are made with an all-zero mask.
 """
 import argparse
 import importlib
@@ -166,6 +169,46 @@ def evaluate(model, loader, config, criterion, out_dir=None, other_text=False):
     return float(np.mean(losses)), float(np.mean(scores))
 
 
+@torch.no_grad()
+def predict(model, loader, out_dir):
+    """Binary test predictions; the (unused) mask argument of the forward pass gets zeros."""
+    model.eval()
+    n = 0
+    for sample, names in loader:
+        images = sample["image"].cuda()
+        preds, _ = model(images, torch.zeros_like(sample["label"]).cuda(), sample["text_token"].cuda(),
+                         sample["text_mask"].cuda())
+        for name, p in zip(names, preds[:, 0].cpu().numpy()):
+            C.save_mask(out_dir, name[:-4], p >= C.THRESHOLD)
+            n += 1
+    return n
+
+
+def run_test(logger, cfg, args, out, config, config_vit, Load_Dataset, utils, RecLMIS):
+    """Task 1.6: best checkpoint -> validation Dice re-check -> binary test predictions (no test metric here)."""
+    size = [cfg["input_size"], cfg["input_size"]]
+    loader_kwargs = dict(batch_size=config.batch_size, shuffle=False, num_workers=cfg["num_workers"], pin_memory=True)
+    model = RecLMIS(config, config_vit, n_channels=config.n_channels, n_classes=config.n_labels).cuda()
+    ckpt_path = os.path.join(out, "checkpoint_best.pth")
+    ckpt = torch.load(ckpt_path, map_location="cuda")
+    model.load_state_dict(ckpt["state_dict"])
+    logger.info("checkpoint epoch {}, reconstruction branch active when saved: {}".format(ckpt["epoch"], ckpt["aux"]))
+    criterion = utils.WeightedDiceBCE(dice_weight=0.5, BCE_weight=0.5)
+    val_set = make_dataset(Load_Dataset, utils, config, args.dataset, "val", Load_Dataset.ValGenerator(output_size=size),
+                           "val")
+    if args.quick:  # dry run on the quick-check checkpoint: its validation subset
+        val_set = subset(val_set, C.split_ids(args.dataset, "val")[:cfg["quick_check"]["val_samples"]])
+    _, val_dice = evaluate(model, DataLoader(val_set, **loader_kwargs), config, criterion)
+    C.check_val_dice(logger, val_dice, ckpt["val_dice"], tol=1e-6)
+    test_set = make_dataset(Load_Dataset, utils, config, args.dataset, "test",
+                            Load_Dataset.ValGenerator(output_size=size), "val")
+    assert len(test_set) == len(C.split_ids(args.dataset, "test"))
+    pred_dir = C.test_pred_dir(out)
+    predict(model, DataLoader(test_set, **loader_kwargs), pred_dir)
+    C.finish_test(logger, out, "reclmis", args.dataset, args.seed, pred_dir, ckpt_path, ckpt["epoch"],
+                  ckpt["val_dice"])
+
+
 def make_scheduler(utils, optimizer, cfg, dataset):
     sch = cfg["scheduler"][dataset]
     if dataset == "qata":  # config.lr == 'cosineLR'
@@ -180,18 +223,21 @@ def main():
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--timing", action="store_true", help="one full-data epoch (compute estimate), runs/timing/")
     parser.add_argument("--quick", action="store_true", help="Task 1.3 checks on a small subset")
+    parser.add_argument("--test", action="store_true", help="Task 1.6: test predictions of the best checkpoint")
     args = parser.parse_args()
 
     cfg = C.load_config("reclmis")
     config, clip, Load_Dataset, utils, RecLMIS = import_official(cfg["official_config"][args.dataset])
     C.set_seed(args.seed)
     out = C.run_dir("reclmis", args.dataset, args.seed, args.quick, args.timing)
-    logger = C.get_logger(os.path.join(out, "train.log"))
+    logger = C.get_logger(os.path.join(out, "test.log" if args.test else "train.log"))
     logger.info("dataset={} seed={} quick={} GPU={} torch={}".format(args.dataset, args.seed, args.quick,
                                                                     os.environ["CUDA_VISIBLE_DEVICES"], torch.__version__))
     logger.info("git commit: {}".format(C.git_commit()))
     logger.info("config: {}".format(cfg))
     config_vit = check_official_config(logger, cfg, config, args.dataset)
+    if args.test:
+        return run_test(logger, cfg, args, out, config, config_vit, Load_Dataset, utils, RecLMIS)
 
     size = [cfg["input_size"], cfg["input_size"]]
     train_set = make_dataset(Load_Dataset, utils, config, args.dataset, "train",

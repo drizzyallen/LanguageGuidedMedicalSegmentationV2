@@ -12,6 +12,8 @@ Data: data/views/lvit/<dataset>/ (symlinks to the common prepared 224x224 data +
 Usage (env lgms_lvit):
   CUDA_VISIBLE_DEVICES=0 python src/phase1/train_lvit.py --dataset qata --seed 1001 [--quick]
 --quick runs the Task 1.2 checks on a small subset and writes to runs/quick_check/lvit/.
+--test (Task 1.6, after training) reloads checkpoint_best.pth, re-checks its validation Dice and saves binary test
+predictions to runs/lvit/<dataset>/seed_<seed>/test/predictions/ (official ValGenerator input, threshold 0.5).
 """
 import argparse
 import os
@@ -139,24 +141,48 @@ def evaluate(model, loader, criterion, out_dir=None, text_mode="own"):
     return float(np.mean(losses)), float(np.mean(scores))
 
 
+def run_test(logger, cfg, args, out, config_vit, Load_Dataset, utils, LViT):
+    """Task 1.6: best checkpoint -> validation Dice re-check -> binary test predictions (no test metric here)."""
+    size = [cfg["input_size"], cfg["input_size"]]
+    loader_kwargs = dict(batch_size=cfg["batch_size"], shuffle=False, num_workers=cfg["num_workers"], pin_memory=True)
+    model = LViT(config_vit, n_channels=cfg["model"]["n_channels"], n_classes=cfg["model"]["n_classes"]).cuda()
+    ckpt_path = os.path.join(out, "checkpoint_best.pth")
+    ckpt = torch.load(ckpt_path, map_location="cuda")
+    model.load_state_dict(ckpt["state_dict"])
+    criterion = utils.WeightedDiceBCE(dice_weight=cfg["loss"]["dice_weight"], BCE_weight=cfg["loss"]["bce_weight"])
+    val_set = make_dataset(Load_Dataset, utils, args.dataset, "val", Load_Dataset.ValGenerator(output_size=size))
+    if args.quick:  # dry run on the quick-check checkpoint: its validation subset
+        val_set = subset(val_set, C.split_ids(args.dataset, "val")[:cfg["quick_check"]["val_samples"]])
+    _, val_dice = evaluate(model, DataLoader(val_set, **loader_kwargs), criterion)
+    C.check_val_dice(logger, val_dice, ckpt["val_dice"], tol=1e-6)
+    test_set = make_dataset(Load_Dataset, utils, args.dataset, "test", Load_Dataset.ValGenerator(output_size=size))
+    assert len(test_set) == len(C.split_ids(args.dataset, "test"))
+    pred_dir = C.test_pred_dir(out)
+    evaluate(model, DataLoader(test_set, **loader_kwargs), criterion, out_dir=pred_dir)  # its Dice is not used
+    C.finish_test(logger, out, "lvit", args.dataset, args.seed, pred_dir, ckpt_path, ckpt["epoch"], ckpt["val_dice"])
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True, choices=["qata", "mosmed"])
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--timing", action="store_true", help="one full-data epoch (compute estimate), runs/timing/")
     parser.add_argument("--quick", action="store_true", help="Task 1.2 checks on a small subset")
+    parser.add_argument("--test", action="store_true", help="Task 1.6: test predictions of the best checkpoint")
     args = parser.parse_args()
 
     Config, Load_Dataset, utils, LViT = import_official()
     cfg = C.load_config("lvit")
     C.set_seed(args.seed)
     out = C.run_dir("lvit", args.dataset, args.seed, args.quick, args.timing)
-    logger = C.get_logger(os.path.join(out, "train.log"))
+    logger = C.get_logger(os.path.join(out, "test.log" if args.test else "train.log"))
     logger.info("dataset={} seed={} quick={} GPU={} torch={}".format(args.dataset, args.seed, args.quick,
                                                                     os.environ["CUDA_VISIBLE_DEVICES"], torch.__version__))
     logger.info("git commit: {}".format(C.git_commit()))
     logger.info("config: {}".format(cfg))
     config_vit = check_official_config(logger, cfg, Config, args.dataset)
+    if args.test:
+        return run_test(logger, cfg, args, out, config_vit, Load_Dataset, utils, LViT)
 
     size = [cfg["input_size"], cfg["input_size"]]
     train_set = make_dataset(Load_Dataset, utils, args.dataset, "train", Load_Dataset.RandomGenerator(output_size=size))

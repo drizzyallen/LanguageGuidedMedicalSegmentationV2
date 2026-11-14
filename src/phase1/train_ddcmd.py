@@ -15,9 +15,12 @@ Data: data/views/ddcmd/<dataset>/ (symlinks to the common prepared 224x224 data 
 Usage (env lgms_ddcmd):
   CUDA_VISIBLE_DEVICES=0 python src/phase1/train_ddcmd.py --dataset qata --seed 1001 [--quick]
 --quick runs the Task 1.4 checks on a small subset and writes to runs/quick_check/ddcmd/.
+--test (Task 1.6, after training) reloads checkpoint_best.ckpt, re-checks its validation Dice and saves binary test
+predictions (transposed back to the original orientation) to runs/ddcmd/<dataset>/seed_<seed>/test/predictions/.
 """
 import argparse
 import csv
+import glob
 import os
 import random
 import sys
@@ -218,12 +221,36 @@ def evaluate(seg_model, ds, batch_size, out_dir=None, other_text=False):
     return float(np.mean(scores))
 
 
+def run_test(logger, cli, out, args, tokenizer, pl, CreateModel, SegData):
+    """Task 1.6: best checkpoint -> validation Dice re-check -> binary test predictions (no test metric here).
+    The official code does not set cuDNN to deterministic mode, so the re-check allows a small tolerance."""
+    ckpts = glob.glob(os.path.join(out, "checkpoint_best*.ckpt"))
+    assert len(ckpts) == 1, "expected exactly one best checkpoint, found {}".format(ckpts)
+    ckpt = torch.load(ckpts[0], map_location="cpu")
+    model = build_lightning_model(pl, CreateModel)(args)
+    model.load_state_dict(ckpt["state_dict"])
+    seg = model.model.cuda()
+    stored = [v for k, v in ckpt["callbacks"].items() if k.startswith("ModelCheckpoint")][0]["best_model_score"]
+    stored, epoch = float(stored), ckpt["epoch"] + 1  # Lightning stores the 0-based epoch
+    ds_valid = make_dataset(SegData, tokenizer, args, "val", "valid")
+    if cli.quick:  # dry run on the quick-check checkpoint: its validation subset
+        ds_valid = subset(ds_valid, C.split_ids(cli.dataset, "val")[:C.load_config("ddcmd")["quick_check"]["val_samples"]])
+    val_dice = evaluate(seg, ds_valid, args.valid_batch_size)
+    C.check_val_dice(logger, val_dice, stored, tol=1e-3)
+    ds_test = make_dataset(SegData, tokenizer, args, "test", "valid")
+    assert len(ds_test) == len(C.split_ids(cli.dataset, "test"))
+    pred_dir = C.test_pred_dir(out)
+    evaluate(seg, ds_test, args.valid_batch_size, out_dir=pred_dir)  # its Dice is not used
+    C.finish_test(logger, out, "ddcmd", cli.dataset, cli.seed, pred_dir, ckpts[0], epoch, stored)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", required=True, choices=["qata", "mosmed"])
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--timing", action="store_true", help="one full-data epoch (compute estimate), runs/timing/")
     parser.add_argument("--quick", action="store_true", help="Task 1.4 checks on a small subset")
+    parser.add_argument("--test", action="store_true", help="Task 1.6: test predictions of the best checkpoint")
     cli = parser.parse_args()
 
     pl, ddcmd_config, CreateModel, SegData = import_official()
@@ -234,7 +261,7 @@ def main():
 
     cfg = C.load_config("ddcmd")
     out = C.run_dir("ddcmd", cli.dataset, cli.seed, cli.quick, cli.timing)
-    logger = C.get_logger(os.path.join(out, "train.log"))
+    logger = C.get_logger(os.path.join(out, "test.log" if cli.test else "train.log"))
     logger.info("dataset={} seed={} quick={} GPU={} torch={} lightning={}".format(
         cli.dataset, cli.seed, cli.quick, os.environ["CUDA_VISIBLE_DEVICES"], torch.__version__, pl.__version__))
     logger.info("git commit: {}".format(C.git_commit()))
@@ -243,6 +270,11 @@ def main():
     set_seed_official(cli.seed)
 
     tokenizer = AutoTokenizer.from_pretrained(args.bert_type, trust_remote_code=True)
+    if cli.test:
+        return run_test(logger, cli, out, args, tokenizer, pl, CreateModel, SegData)
+    # Lightning would save a new best checkpoint as checkpoint_best-v1.ckpt next to an old one; start clean.
+    old = glob.glob(os.path.join(out, "checkpoint_best*.ckpt"))
+    assert cli.quick or not old, "run directory already has a checkpoint (move it away first): {}".format(old)
     ds_train = make_dataset(SegData, tokenizer, args, "train", "train")
     ds_valid = make_dataset(SegData, tokenizer, args, "val", "valid")
     if cli.quick:

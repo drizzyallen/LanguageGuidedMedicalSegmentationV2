@@ -163,3 +163,42 @@ def count_params(model):
 def grad_norm(module):
     norms = [p.grad.detach().norm().item() for p in module.parameters() if p.grad is not None]
     return float(np.sqrt(np.sum(np.square(norms)))) if norms else 0.0
+
+
+# ---------------------------------------------------------------------------------------------------------------
+# Task 1.6: test predictions (same output format as Phase 0 src/predict.py, scored by src/evaluation/evaluate.py)
+
+def test_pred_dir(out):
+    path = os.path.join(out, "test", "predictions")
+    os.makedirs(path, exist_ok=True)
+    for name in os.listdir(path):  # a rerun replaces all predictions
+        os.remove(os.path.join(path, name))
+    return path
+
+
+def check_val_dice(logger, recomputed, stored, tol):
+    """The best checkpoint, reloaded, must reproduce the validation Dice it was selected with."""
+    logger.info("best checkpoint reloaded: validation Dice {:.6f} (stored at selection {:.6f})".format(
+        recomputed, stored))
+    assert abs(recomputed - stored) <= tol, "validation Dice not reproduced: {} vs {}".format(recomputed, stored)
+
+
+def finish_test(logger, out, method, dataset, seed, pred_dir, ckpt_path, epoch, val_dice):
+    """Check the saved test predictions (one per test ID, 224x224, {0,255}) and write prediction_info.json
+    (Phase 0 format). No test metric is computed here."""
+    import json
+    ids = split_ids(dataset, "test")
+    assert sorted(os.listdir(pred_dir)) == sorted("{}.png".format(s) for s in ids), "test predictions != test IDs"
+    empty = 0
+    for sample_id in ids:
+        pred = np.array(Image.open(os.path.join(pred_dir, "{}.png".format(sample_id))))
+        assert pred.shape == (SIZE, SIZE) and pred.dtype == np.uint8, (sample_id, pred.shape, pred.dtype)
+        assert set(np.unique(pred).tolist()) <= {0, 255}, sample_id
+        empty += int(pred.max() == 0)
+    info = {"method": method, "dataset": dataset, "seed": seed, "n_predictions": len(ids), "threshold": THRESHOLD,
+            "checkpoint": {"path": os.path.relpath(ckpt_path, ROOT), "epoch": int(epoch), "val_dice": float(val_dice)},
+            "git_commit": git_commit()}
+    with open(os.path.join(out, "test", "prediction_info.json"), "w") as f:
+        json.dump(info, f, indent=2)
+    logger.info("TEST PREDICTIONS DONE: {} masks (224x224, {{0,255}}; {} empty) in {}".format(
+        len(ids), empty, os.path.relpath(pred_dir, ROOT)))
