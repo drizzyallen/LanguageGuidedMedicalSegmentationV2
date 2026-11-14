@@ -1,0 +1,83 @@
+# RecLMIS (official repository, external/RecLMIS @ d3265c8)
+# Training recipe from Config_covid19.py (QaTa-COV19) and Config_MosMedPlus.py (MosMedData+), train_model.py,
+# Train_one_epoch.py, Load_Dataset.py, utils.py. src/phase1/train_reclmis.py reads every value below from the
+# official config module of the dataset and asserts it matches this file.
+method: reclmis
+source: https://github.com/ShawnHuang497/RecLMIS
+environment: lgms_reclmis
+
+official_config:           # imported directly (train_model.py's -c mapping loads Config_covid19 for "Config_MosMedPlus")
+  qata: Config_covid19
+  mosmed: Config_MosMedPlus
+
+model:
+  file: external/RecLMIS/nets/RecLMIS.py
+  class: RecLMIS
+  n_channels: 3            # image read as 3 identical channels by cv2.imread
+  n_classes: 1             # sigmoid output
+  vit_config:              # get_ViT_config()
+    qata:
+      base_channel: 64
+      clip_backbone: ViT-B/32
+      text_mask_rate: 0.3
+      img_mask_rate: 0.5
+      pool_mode: max_pool
+      rec_trans_num_layers1: 4
+      mask_mode: dist
+      frozen_clip: true
+      mask_mode_dist_random: true
+      dropout: false
+      dropout_value: 0.3
+    mosmed:
+      base_channel: 64
+      clip_backbone: ViT-B/32
+      text_mask_rate: 0.3
+      img_mask_rate: 0.3
+      pool_mode: max_pool
+      rec_trans_num_layers1: 3
+      mask_mode: dist
+      frozen_clip: true
+      mask_mode_dist_random: true
+      dropout: true
+      dropout_value: 0.5
+
+text:
+  annotation: "data/views/lvit/<dataset>/<Split>_Folder/<Split>_text.xlsx (verbatim Task 1.1 text; LViT layout)"
+  reader: "utils.read_text: texts with < 9 words padded with ' EOF XXX' * (9 - words)"
+  tokenizer: "clip.tokenize(context_length=token_len, truncate=True); text_mask = token != 0"
+  token_len: 18
+  encoder: "CLIP ViT-B/32 text transformer (nets/ViT-B-32.pt, official OpenAI file), frozen"
+
+input_size: 224
+input_scaling: "to_tensor (uint8 / 255)"
+pretraining: "CLIP ViT-B/32 (text encoder only, frozen); image branch from scratch"
+
+loss:
+  segmentation: "WeightedDiceBCE(dice_weight=0.5, BCE_weight=0.5)"
+  total: "sum of loss_weight[k] * loss_k"   # Train_one_epoch.py
+  loss_weight: {loss_criterion: 5, loss_ccl: 0.2, loss_text_rec: 1, loss_img_rec: 1}
+
+optimizer:
+  name: Adam               # config optimizer = "Adam" (weight_decay only used for AdamW)
+  lr: 3.0e-4               # both configs
+
+scheduler:
+  qata: {name: CosineAnnealingWarmRestarts, T_0: 10, T_mult: 1, eta_min: 1.0e-4, step: per_epoch}   # lr = 'cosineLR'
+  mosmed: {name: "LambdaLR max(0.99 ** epoch, 0.1)", step: per_epoch}                                 # lr = 'exp'
+
+batch_size: {qata: 32, mosmed: 20}
+num_workers: 8             # train_model.py
+augmentation: "train only: BioMedicalGaussianBlur(prob=0.5) + PhotoMetricDistortion, then RandomGenerator (p=0.5 rot90 + flip, else p=0.25 rotation in [-20, 20) deg)"
+max_epochs: {qata: 2000, mosmed: 400}
+early_stopping_patience: {qata: 100, mosmed: 30}
+min_epoch_to_save: 0       # train_model.py: best model saved when epoch + 1 > 0
+deterministic: true
+gpus: 1                    # single RTX 3090 (no DataParallel); official batch sizes fit (peak 15.8 GB QaTa, 10.0 GB MosMed)
+
+checkpoint_selection: "best validation Dice (per-image Dice at 224x224, threshold 0.5, mean over all LViT validation images)"
+seeds: [1001, 1002, 1003]
+
+quick_check:
+  train_samples: 256
+  val_samples: 64
+  epochs: 10

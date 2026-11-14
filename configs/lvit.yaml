@@ -1,0 +1,67 @@
+# LViT-T (official repository, external/LViT @ ba90775)
+# Training recipe from Config.py / train_model.py / Train_one_epoch.py / Load_Dataset.py / utils.py.
+# src/phase1/train_lvit.py reads every value below from the official code and asserts it matches this file.
+method: lvit
+source: https://github.com/HUANGLIZI/LViT
+environment: lgms_lvit
+
+model:
+  file: external/LViT/nets/LViT.py
+  class: LViT
+  variant: LViT            # Config.py model_name = 'LViT' (default); 'LViT_pretrain' not used (see PHASE1_MODEL_SETUP.md)
+  n_channels: 3            # Config.py n_channels (grayscale image read as 3 identical channels by cv2.imread)
+  n_classes: 1             # Config.py n_labels (sigmoid output)
+  ctrans:                  # Config.get_CTranS_config()
+    KV_size: 960
+    num_heads: 4
+    num_layers: 4
+    expand_ratio: 4
+    embeddings_dropout_rate: 0.1
+    attention_dropout_rate: 0.1
+    dropout_rate: 0
+    patch_sizes: [16, 8, 4, 2]
+    base_channel: 64
+
+text:
+  annotation: "data/views/lvit/<dataset>/<Split>_Folder/<Split>_text.xlsx (verbatim Task 1.1 text)"
+  reader: "utils.read_text: texts with < 9 words padded with ' EOF XXX' * (9 - words)"
+  encoder: "bert_embedding.BertEmbedding() default: bert_12_768_12 / book_corpus_wiki_en_uncased (frozen, CPU, in the data loader)"
+  tokens: 10               # Load_Dataset.ImageToImage2D keeps the first 10 token embeddings (1 x 10 x 768)
+
+input_size: 224            # Config.py img_size
+input_scaling: "to_tensor (uint8 / 255)"   # Load_Dataset RandomGenerator / ValGenerator
+pretraining: none          # text encoder is pretrained BERT (frozen, outside the model); image branch from scratch
+
+loss:
+  name: WeightedDiceBCE    # train_model.py: WeightedDiceBCE(dice_weight=0.5, BCE_weight=0.5)
+  dice_weight: 0.5
+  bce_weight: 0.5
+
+optimizer:
+  name: Adam               # train_model.py
+  lr:                      # Config.py: "MoNuSeg: 1e-3, Covid19: 3e-4"
+    qata: 3.0e-4
+    mosmed: 3.0e-4         # Config.py has no MosMedData+ value; same as QaTa and the Phase 0 U-Net (paper: 1e-3, not used). Decision 2 in PHASE1_MODEL_SETUP.md.
+
+scheduler:
+  name: CosineAnnealingWarmRestarts   # utils.py; Config.py cosineLR = True
+  T_0: 10
+  T_mult: 1
+  eta_min: 1.0e-4
+  step: per_epoch          # Train_one_epoch.py: stepped once per epoch, at the end of validation
+
+batch_size: 2              # Config.py: batch_size = 2 ("For LViT-T, 2 is better than 4")
+num_workers: 8             # train_model.py
+augmentation: "LViT RandomGenerator: p=0.5 random rot90 + flip, else p=0.25 random rotation in [-20, 20) deg (nearest)"
+max_epochs: 2000           # Config.py epochs
+early_stopping_patience: 50   # Config.py
+min_epoch_to_save: 5       # train_model.py: best model saved only when epoch + 1 > 5
+deterministic: true        # train_model.py: cudnn.deterministic = True, cudnn.benchmark = False
+
+checkpoint_selection: "best validation Dice (per-image Dice at 224x224, threshold 0.5, mean over all LViT validation images)"
+seeds: [1001, 1002, 1003]
+
+quick_check:               # Tasks 1.2-1.4 checks only (runs/quick_check/), not used for any setting
+  train_samples: 256       # first N training IDs (split order)
+  val_samples: 64
+  epochs: 10

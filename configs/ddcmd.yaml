@@ -1,0 +1,53 @@
+# DD-CMD (official repository, external/DD-CMD @ 27387c4)
+# Starting point: the official config/train.yaml (same settings for both datasets; only paths/names switch),
+# net/creratemodel.py (loss, optimizer, scheduler), train.py (trainer, callbacks), utils/dataset.py (data).
+# src/phase1/train_ddcmd.py reads every value below from the official files and asserts it matches this file.
+method: ddcmd
+source: https://github.com/maklachur/DD-CMD
+environment: lgms_ddcmd
+
+model:
+  file: external/DD-CMD/net/model.py
+  class: TextGuidedSegmentationModel   # wrapped by net/creratemodel.py CreateModel (Lightning)
+  vision_type: facebook/convnext-tiny-224          # train.yaml; loaded from external/pretrained/huggingface/convnext-tiny-224
+  bert_type: microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext   # train.yaml; local pinned copy
+  text_encoder_frozen: true    # FrozenTextEncoder
+  vision_encoder_frozen: false
+
+data:
+  layout: "data/views/ddcmd/<dataset>/{Train,Val,Test}_Folder/{img,GTs} + prompt/<Split>_text.csv (verbatim Task 1.1 text)"
+  image_size: [224, 224]       # train.yaml
+  input_text_len: 24           # train.yaml (tokenizer padding="max_length", truncation)
+  loader: "utils/dataset.py SegData: MONAI PILReader (images and masks transposed H<->W, consistently), z-score intensity normalization"
+  augmentation: "train: RandZoom(0.95-1.15, p=0.3), RandRotate(+-0.3 rad, p=0.3), RandGaussianNoise(std 0.1, p=0.3), RandFlip x2 (p=0.5), RandRotate90 (p=0.2)"
+
+loss: "monai DiceCELoss(sigmoid=True)"
+optimizer:
+  name: AdamW                  # creratemodel.py, torch defaults otherwise (weight_decay 0.01)
+  lr: 5.0e-5                   # train.yaml
+scheduler:
+  name: CosineAnnealingLR      # creratemodel.py
+  T_max: 200
+  eta_min: 1.0e-6
+  step: per_epoch              # Lightning default interval
+train_batch_size: 8
+valid_batch_size: 8
+num_workers: 0
+min_epochs: 1
+max_epochs: 160
+early_stopping_patience: 50
+devices: 1
+precision: 32                  # Lightning default
+
+# Official: ckpt_monitor val_MIoU (mode max) for ModelCheckpoint and EarlyStopping. Phase 1 requires validation
+# Dice, so both monitor the common validation Dice instead (logged as val_common_dice).
+checkpoint_selection: "best validation Dice (per-image Dice at 224x224, threshold 0.5, mean over all LViT validation images)"
+official_ckpt_monitor: val_MIoU
+monitor: val_common_dice
+monitor_mode: max
+seeds: [1001, 1002, 1003]      # official train.py: set_seed(42)
+
+quick_check:
+  train_samples: 256
+  val_samples: 64
+  epochs: 10
