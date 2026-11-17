@@ -10,6 +10,9 @@ DATASET="$2"
 SEED="$3"
 ENVS=/data/ramialle/miniconda3/envs
 PY="$ENVS/lgms_${METHOD}/bin/python"
+if [ "$METHOD" = ddcmd ]; then  # CPU augmentation in the training process: limit threads (see train_ddcmd.py)
+  export OMP_NUM_THREADS=8 MKL_NUM_THREADS=8
+fi
 echo "=== $(date '+%F %T') train $METHOD $DATASET $SEED (GPU $CUDA_VISIBLE_DEVICES)"
 "$PY" -W ignore "src/phase1/train_${METHOD}.py" --dataset "$DATASET" --seed "$SEED"
 echo "=== $(date '+%F %T') test predictions"

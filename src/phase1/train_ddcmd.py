@@ -33,6 +33,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from phase1 import common as C  # noqa: E402
 
 DDCMD = os.path.join(C.EXTERNAL, "DD-CMD")
+# The official loader augments on the CPU in the training process (num_workers=0). PyTorch's default of one
+# intra-op thread per core (128 here) made concurrent DD-CMD runs thrash the CPU (15-30x slower epochs).
+# Limiting the threads changes only CPU parallelism, not the training recipe.
+CPU_THREADS = 8
 HF = os.path.join(C.PRETRAINED, "huggingface")
 
 
@@ -254,6 +258,7 @@ def main():
     cli = parser.parse_args()
 
     pl, ddcmd_config, CreateModel, SegData = import_official()
+    torch.set_num_threads(CPU_THREADS)
     from pytorch_lightning.callbacks import EarlyStopping, ModelCheckpoint
     from pytorch_lightning.loggers import CSVLogger
     from torch.utils.data import DataLoader
@@ -266,6 +271,8 @@ def main():
         cli.dataset, cli.seed, cli.quick, os.environ["CUDA_VISIBLE_DEVICES"], torch.__version__, pl.__version__))
     logger.info("git commit: {}".format(C.git_commit()))
     C.check_gpu(logger)
+    logger.info("CPU threads: torch {} (OMP_NUM_THREADS={})".format(torch.get_num_threads(),
+                                                                    os.environ.get("OMP_NUM_THREADS")))
     logger.info("config: {}".format(cfg))
     args = load_args(logger, cfg, ddcmd_config, cli.dataset)
     set_seed_official(cli.seed)
